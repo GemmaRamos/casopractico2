@@ -1,0 +1,5 @@
+[localhost]
+127.0.0.1 ansible_connection=local
+
+[azure_vms]
+52.143.137.128 ansible_user=gemma ansible_ssh_public_key_file=C:/Users/gemma/.ssh/id_rsa.pub
