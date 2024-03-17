@@ -1,0 +1,66 @@
+---
+- name: Instalación y configuración de la aplicación en clúster AKS
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    azurerm_resource_group:
+      grc-rg:
+        name:grc-rg-2
+    azurerm_kubernetes_cluster:
+      aks:
+        name: grc-aks-cp2
+    azurerm_container_registry:
+      acr:
+        login_server: grcacr.azurecr.io
+
+  tasks:
+
+    - name: Copiar kubeconfig a la ruta deseada
+      copy:
+        src: "~/.kube/config"
+        dest: "~/.kube/config_{{ azurerm_kubernetes_cluster.aks.name }}"
+        remote_src: yes
+
+    - name: Desplegar la aplicación en el clúster AKS
+      community.kubernetes.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: grc_aks-aplicacion
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: grc_aks-aplicacion
+            template:
+              metadata:
+                labels:
+                  app: grc_aks-aplicacion
+              spec:
+                containers:
+                  - name: grc_aks-aplicacion
+                    image: "{{ azurerm_container_registry.acr.login_server }}/crate:casopractico2"
+                    ports:
+                      - containerPort: 80
+        kubeconfig: "~/.kube/config_{{ azurerm_kubernetes_cluster.aks.name }}"
+        namespace: default
+
+    - name: Configurar almacenamiento persistente
+      community.kubernetes.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: grc-pvc
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+        kubeconfig: "~/.kube/config_{{ azurerm_kubernetes_cluster.aks.name }}"
+        namespace: default

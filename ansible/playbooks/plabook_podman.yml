@@ -1,0 +1,57 @@
+---
+- name: Despliegue de servidor web en contenedor Podman en Azure VM
+  hosts: 52.143.137.128
+  become: yes
+  
+  vars:
+    application_image: grcacr.azurecr.io/httpd:casopractico2
+    registry_url: "{{ azurerm_container_registry.acr.login_server }}"
+    username: "{{ azurerm_container_registry.acr.admin_username }}"
+    password: "{{ azurerm_container_registry.acr.admin_password }}"
+    web_content_directory: "/var/www/html"
+    htpasswd_file: "/root/htpasswd"
+    
+  tasks:
+    - name: Instalar Podman
+      package:
+        name: podman
+        state: present
+	  
+	- name: Crear directorio para contenido web
+      file:
+        path: "{{ web_content_directory }}"
+        state: directory
+      become: yes 
+
+    - name: Descargar imagen desde ACR
+	  command: >
+        podman login -u {{ username }} -p {{ password }} {{ registry_url }} &&
+        podman pull --tls-verify=false {{ application_image }}
+
+    - name: Crear contenedor Podman
+	  containers.podman.podman_container:
+      name: sarthak
+      image: "{{ application_image }}""
+      state: started
+      detach: true
+      exposed_ports:
+        - 80
+      ports:
+        - 4444:80
+      volumes: "{{ web_content_directory }}:/usr/local/apache2/htdocs/"	
+
+
+    - name: Crear certificado autofirmado
+      shell: openssl req -x509 -newkey rsa:4096 -keyout /etc/pki/tls/private/server.key -out /etc/pki/tls/certs/server.crt -days 365 -nodes -subj "/CN=tudominio.com"
+
+    - name: Copiar certificado al contenedor
+      shell: podman cp /etc/pki/tls/private/server.key servidor_web:/etc/pki/tls/private/ && podman cp /etc/pki/tls/certs/server.crt servidor_web:/etc/pki/tls/certs/
+
+    - name: Crear archivo .htpasswd
+      shell: htpasswd -c -b {{ htpasswd_file }} usuario contraseña
+
+    - name: Copiar archivo .htpasswd al contenedor
+      shell: podman cp {{ htpasswd_file }} servidor_web:/etc/httpd/.htpasswd
+
+    - name: Reiniciar contenedor para aplicar cambios
+      shell: podman restart servidor_web
